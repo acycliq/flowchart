@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Cell Classification Flow Analysis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .info {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        select {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: 2px solid #4CAF50;
+            border-radius: 4px;
+            background-color: white;
+            cursor: pointer;
+            min-width: 250px;
+        }
+        select:hover {
+            background-color: #f0f0f0;
+        }
+        .plot-frame {
+            display: none;
+            width: 100%;
+            height: 800px;
+            border: none;
+        }
+        .plot-frame.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Cell Classification Flow Analysis</h1>
+        <div class="info">
+            <p><strong>Analysis:</strong> Comparison of cell classifications before and after plane adjustment in pciSeq pipeline.</p>
+            <p>Select a region below to view the classification changes.</p>
+        </div>
+        <div class="controls">
+            <label for="region-select"><strong>Select Region:</strong></label>
+            <select id="region-select" onchange="changeRegion(this.value)">
+                <option value="ca1" selected>CA1 Region</option>
+                <option value="ca2">CA2 Region</option>
+                <option value="ca3">CA3 Region</option>
+                <option value="dg">Dentate Gyrus (DG)</option>
+                <option value="outside">Outside All Regions</option>
+            </select>
+        </div>
+        <iframe id="frame-ca1" class="plot-frame active" src="temp_ca1.html"></iframe>
+        <iframe id="frame-ca2" class="plot-frame" src="temp_ca2.html"></iframe>
+        <iframe id="frame-ca3" class="plot-frame" src="temp_ca3.html"></iframe>
+        <iframe id="frame-dg" class="plot-frame" src="temp_dg.html"></iframe>
+        <iframe id="frame-outside" class="plot-frame" src="temp_outside.html"></iframe>
+    </div>
+    
+    <script>
+        function changeRegion(region) {
+            // Hide all frames
+            const frames = document.querySelectorAll('.plot-frame');
+            frames.forEach(frame => frame.classList.remove('active'));
+            
+            // Show selected frame
+            const selectedFrame = document.getElementById('frame-' + region);
+            if (selectedFrame) {
+                selectedFrame.classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>
