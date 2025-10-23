@@ -2,7 +2,8 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Cell Classification Flow Analysis</title>
+    <title>Flowchart</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -19,75 +20,1272 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         h1 {
-            color: #333;
-            text-align: center;
+            color: #2c3e50;
             margin-bottom: 10px;
         }
         .info {
-            background-color: #e7f3ff;
-            padding: 15px;
-            border-radius: 4px;
+            color: #555;
             margin-bottom: 20px;
+            padding: 15px;
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            border-radius: 4px;
         }
         .controls {
-            text-align: center;
-            margin: 20px 0;
+            display: flex;
+            gap: 30px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .control-group label {
+            font-weight: bold;
+            color: #2c3e50;
         }
         select {
-            padding: 10px 20px;
+            padding: 10px 15px;
             font-size: 16px;
-            border: 2px solid #4CAF50;
+            border: 2px solid #27ae60;
             border-radius: 4px;
             background-color: white;
             cursor: pointer;
-            min-width: 250px;
         }
         select:hover {
-            background-color: #f0f0f0;
+            border-color: #229954;
         }
-        .plot-frame {
-            display: none;
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        .filter-btn {
+            padding: 10px 20px;
+            font-size: 15px;
+            border: 2px solid #3498db;
+            border-radius: 4px;
+            background-color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .filter-btn:hover {
+            background-color: #e8f4f8;
+        }
+        .filter-btn.active {
+            background-color: #3498db;
+            color: white;
+            font-weight: bold;
+        }
+        .stats {
+            margin-top: 15px;
+            padding: 12px;
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .stats strong {
+            color: #856404;
+        }
+        #sankey-chart {
             width: 100%;
-            height: 800px;
-            border: none;
-        }
-        .plot-frame.active {
-            display: block;
+            height: 700px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Cell Classification Flow Analysis</h1>
-        <div class="controls">
-            <label for="region-select"><strong>Select Region:</strong></label>
-            <select id="region-select" onchange="changeRegion(this.value)">
-                <option value="ca1" selected>CA1 Region</option>
-                <option value="ca2">CA2 Region</option>
-                <option value="ca3">CA3 Region</option>
-                <option value="dg">Dentate Gyrus (DG)</option>
-                <option value="outside">Outside All Above</option>
-            </select>
+        <h1>Cell Classification Flowchart</h1>
+        <div class="info">
+             <strong>Overview:</strong> This dashboard shows how cell classifications changed before and after plane adjustment in pciSeq analysis.
+             Select a region and apply gene count filters to explore the data.
         </div>
-        <iframe id="frame-ca1" class="plot-frame active" src="temp_ca1.html"></iframe>
-        <iframe id="frame-ca2" class="plot-frame" src="temp_ca2.html"></iframe>
-        <iframe id="frame-ca3" class="plot-frame" src="temp_ca3.html"></iframe>
-        <iframe id="frame-dg" class="plot-frame" src="temp_dg.html"></iframe>
-        <iframe id="frame-outside" class="plot-frame" src="temp_outside.html"></iframe>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="regionSelect">Select Region:</label>
+                <select id="regionSelect" onchange="updateChart()">
+                    <option value="ca1" selected>CA1 Region</option>
+                    <option value="ca2">CA2 Region</option>
+                    <option value="ca3">CA3 Region</option>
+                    <option value="dg">Dentate Gyrus (DG)</option>
+                    <option value="outside">Outside All Regions</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Gene Count Filter:</label>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" id="btn-all" onclick="setFilter('all')">All Cells</button>
+                    <button class="filter-btn" id="btn-filtered" onclick="setFilter('filtered')">≥40 Counts</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats" id="stats-display"></div>
+        
+        <div id="sankey-chart"></div>
     </div>
     
     <script>
-        function changeRegion(region) {
-            // Hide all frames
-            const frames = document.querySelectorAll('.plot-frame');
-            frames.forEach(frame => frame.classList.remove('active'));
-            
-            // Show selected frame
-            const selectedFrame = document.getElementById('frame-' + region);
-            if (selectedFrame) {
-                selectedFrame.classList.add('active');
-            }
+        // Embedded Sankey datasets
+        const sankeyData = {
+  "ca1": {
+    "all": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          7,
+          10,
+          11,
+          6,
+          7,
+          8,
+          10,
+          11,
+          9,
+          10,
+          6,
+          8,
+          10,
+          11,
+          6,
+          8,
+          10,
+          11
+        ],
+        "value": [
+          1185,
+          32,
+          5,
+          1,
+          56,
+          12,
+          65,
+          125,
+          3,
+          1,
+          69,
+          2,
+          80,
+          20,
+          8,
+          20,
+          2,
+          25,
+          3,
+          462,
+          7,
+          40,
+          19,
+          23,
+          750
+        ]
+      },
+      "stats": {
+        "total_cells": 3015,
+        "changed": 393,
+        "unchanged": 2622
+      }
+    },
+    "filtered": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          7,
+          10,
+          11,
+          6,
+          8,
+          9,
+          10,
+          6,
+          8,
+          10,
+          11
+        ],
+        "value": [
+          1142,
+          30,
+          5,
+          1,
+          50,
+          11,
+          65,
+          125,
+          3,
+          1,
+          5,
+          8,
+          19,
+          2,
+          17,
+          3,
+          411,
+          4
+        ]
+      },
+      "stats": {
+        "total_cells": 1902,
+        "changed": 197,
+        "unchanged": 1705
+      }
+    }
+  },
+  "ca2": {
+    "all": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          1,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4
+        ],
+        "target": [
+          5,
+          6,
+          5,
+          6,
+          7,
+          8,
+          5,
+          8,
+          9,
+          5,
+          7,
+          8,
+          9
+        ],
+        "value": [
+          17,
+          36,
+          6,
+          1,
+          8,
+          1,
+          1,
+          20,
+          1,
+          3,
+          4,
+          2,
+          73
+        ]
+      },
+      "stats": {
+        "total_cells": 173,
+        "changed": 19,
+        "unchanged": 154
+      }
+    },
+    "filtered": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Other (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Other (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(201, 203, 207, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          1,
+          2,
+          2,
+          3,
+          3
+        ],
+        "target": [
+          4,
+          5,
+          4,
+          5,
+          4,
+          7
+        ],
+        "value": [
+          13,
+          36,
+          1,
+          1,
+          1,
+          16
+        ]
+      },
+      "stats": {
+        "total_cells": 68,
+        "changed": 3,
+        "unchanged": 65
+      }
+    }
+  },
+  "ca3": {
+    "all": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          10,
+          11,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          7,
+          8,
+          10,
+          11,
+          9,
+          10,
+          7,
+          8,
+          10,
+          11,
+          8,
+          9,
+          10,
+          11
+        ],
+        "value": [
+          48,
+          9,
+          1,
+          4,
+          6,
+          3,
+          572,
+          2,
+          1,
+          1,
+          1,
+          12,
+          23,
+          107,
+          4,
+          9,
+          45,
+          2,
+          4,
+          4,
+          158,
+          6,
+          18,
+          1,
+          14,
+          537
+        ]
+      },
+      "stats": {
+        "total_cells": 1592,
+        "changed": 125,
+        "unchanged": 1467
+      }
+    },
+    "filtered": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          10,
+          11,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          7,
+          8,
+          10,
+          9,
+          10,
+          7,
+          8,
+          10,
+          11
+        ],
+        "value": [
+          36,
+          8,
+          1,
+          4,
+          4,
+          3,
+          571,
+          2,
+          1,
+          1,
+          1,
+          12,
+          10,
+          2,
+          29,
+          1,
+          3,
+          2,
+          139,
+          4
+        ]
+      },
+      "stats": {
+        "total_cells": 834,
+        "changed": 49,
+        "unchanged": 785
+      }
+    }
+  },
+  "dg": {
+    "all": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          6,
+          7,
+          8,
+          10,
+          11,
+          9,
+          10,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          8,
+          10,
+          11
+        ],
+        "value": [
+          7,
+          150,
+          81,
+          1,
+          2,
+          11,
+          22,
+          3441,
+          93,
+          119,
+          53,
+          4,
+          1,
+          4,
+          63,
+          1,
+          363,
+          7,
+          4,
+          157,
+          15,
+          2696
+        ]
+      },
+      "stats": {
+        "total_cells": 7295,
+        "changed": 585,
+        "unchanged": 6710
+      }
+    },
+    "filtered": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          4
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          6,
+          7,
+          8,
+          10,
+          11,
+          9,
+          10,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "value": [
+          6,
+          150,
+          81,
+          1,
+          2,
+          4,
+          19,
+          1936,
+          56,
+          27,
+          41,
+          2,
+          4,
+          62,
+          1,
+          336,
+          5
+        ]
+      },
+      "stats": {
+        "total_cells": 2733,
+        "changed": 264,
+        "unchanged": 2469
+      }
+    }
+  },
+  "outside": {
+    "all": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          5,
+          5,
+          5,
+          5,
+          5
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          7,
+          8,
+          10,
+          11,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          9,
+          10,
+          11,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          8,
+          9,
+          10,
+          11
+        ],
+        "value": [
+          39,
+          6,
+          1,
+          1,
+          2,
+          1,
+          2,
+          258,
+          18,
+          5,
+          1,
+          4,
+          33,
+          406,
+          1,
+          55,
+          21,
+          1214,
+          25,
+          37,
+          3,
+          4,
+          14,
+          12,
+          3959,
+          66,
+          8,
+          40,
+          51,
+          158,
+          5935
+        ]
+      },
+      "stats": {
+        "total_cells": 12380,
+        "changed": 569,
+        "unchanged": 11811
+      }
+    },
+    "filtered": {
+      "nodes": {
+        "label": [
+          "CA1 (Before)",
+          "CA3 (Before)",
+          "DG (Before)",
+          "Oligo (Before)",
+          "Other (Before)",
+          "Zero (Before)",
+          "CA1 (After)",
+          "CA3 (After)",
+          "DG (After)",
+          "Oligo (After)",
+          "Other (After)",
+          "Zero (After)"
+        ],
+        "color": [
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)",
+          "rgba(31, 119, 180, 0.6)",
+          "rgba(255, 127, 14, 0.6)",
+          "rgba(44, 160, 44, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+          "rgba(201, 203, 207, 0.6)",
+          "rgba(169, 169, 169, 0.6)"
+        ]
+      },
+      "links": {
+        "source": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          2,
+          2,
+          2,
+          3,
+          3,
+          3,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4
+        ],
+        "target": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          6,
+          7,
+          8,
+          10,
+          11,
+          7,
+          8,
+          10,
+          11,
+          9,
+          10,
+          11,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11
+        ],
+        "value": [
+          37,
+          6,
+          1,
+          1,
+          1,
+          1,
+          2,
+          257,
+          18,
+          5,
+          1,
+          26,
+          196,
+          15,
+          2,
+          844,
+          19,
+          6,
+          2,
+          4,
+          11,
+          7,
+          3224,
+          22
+        ]
+      },
+      "stats": {
+        "total_cells": 4708,
+        "changed": 150,
+        "unchanged": 4558
+      }
+    }
+  }
+};
+        
+        // Current state
+        let currentRegion = 'ca1';
+        let currentFilter = 'all';
+        
+        // Update chart
+        function updateChart() {
+            currentRegion = document.getElementById('regionSelect').value;
+            renderSankey();
         }
+        
+        // Set filter
+        function setFilter(filterType) {
+            currentFilter = filterType;
+            
+            // Update button states
+            document.getElementById('btn-all').classList.remove('active');
+            document.getElementById('btn-filtered').classList.remove('active');
+            document.getElementById('btn-' + filterType).classList.add('active');
+            
+            renderSankey();
+        }
+        
+        // Render Sankey diagram
+        function renderSankey() {
+            const data = sankeyData[currentRegion][currentFilter];
+            
+            // Update stats display
+            const statsHtml = `
+                <strong>Statistics:</strong> 
+                Total cells: ${data.stats.total_cells.toLocaleString()} | 
+                Changed classification: ${data.stats.changed.toLocaleString()} | 
+                Unchanged: ${data.stats.unchanged.toLocaleString()}
+            `;
+            // document.getElementById('stats-display').innerHTML = statsHtml;
+            
+            // Create Sankey trace
+            const trace = {
+                type: 'sankey',
+                valueformat: ',.0f',
+                valuesuffix: ' cells',
+                node: {
+                    pad: 15,
+                    thickness: 20,
+                    line: {
+                        color: 'black',
+                        width: 0.5
+                    },
+                    label: data.nodes.label,
+                    color: data.nodes.color,
+                    hovertemplate: '%{label}<br>%{value:,.0f} cells<extra></extra>'
+                },
+                link: {
+                    source: data.links.source,
+                    target: data.links.target,
+                    value: data.links.value,
+                    hovertemplate: '%{source.label} → %{target.label}<br>%{value:,.0f} cells<extra></extra>'
+                }
+            };
+            
+            // Layout
+            const regionNames = {
+                'ca1': 'CA1 Region',
+                'ca2': 'CA2 Region',
+                'ca3': 'CA3 Region',
+                'dg': 'Dentate Gyrus (DG)',
+                'outside': 'Outside All Regions'
+            };
+            
+            const filterLabel = currentFilter === 'all' ? 'All Cells' : '≥40 Gene Counts';
+            
+            const layout = {
+                title: {
+                    text: `Cell Classification Changes in ${regionNames[currentRegion]}<br><sub>${filterLabel}</sub>`,
+                    font: {
+                        size: 18
+                    }
+                },
+                font: {
+                    size: 12
+                },
+                height: 700,
+                margin: {
+                    t: 80,
+                    b: 50,
+                    l: 50,
+                    r: 50
+                }
+            };
+            
+            // Render with Plotly.react for efficient updates
+            Plotly.react('sankey-chart', [trace], layout, {responsive: true});
+        }
+        
+        // Initial render
+        renderSankey();
     </script>
 </body>
 </html>
